@@ -80,6 +80,7 @@ void Overlay(const json::Value& j, Config& c) {
   std::wstring backdrop = Lower(Str(j["backdrop"], c.backdrop));
   if (backdrop == L"acrylic" || backdrop == L"mica" || backdrop == L"none") c.backdrop = backdrop;
   if (j["autostart"].IsBool()) c.autostart = j["autostart"].AsBool();
+  if (j["mascot"].IsBool()) c.mascot = j["mascot"].AsBool();
   num("maxResults", c.maxResults, 1, 200);
   num("visibleRows", c.visibleRows, 1, 30);
 
@@ -176,6 +177,7 @@ json::Value ConfigStore::ToJson(const Config& c) {
   j.Set("theme", Value::String(c.theme));
   j.Set("backdrop", Value::String(c.backdrop));
   j.Set("autostart", Value::Bool(c.autostart));
+  j.Set("mascot", Value::Bool(c.mascot));
   j.Set("maxResults", Value::Number(c.maxResults));
   j.Set("visibleRows", Value::Number(c.visibleRows));
   j.Set("fileRoots", StrArray(c.fileRoots));

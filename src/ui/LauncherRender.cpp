@@ -22,15 +22,15 @@ struct TileColors {
   const wchar_t* glyph;            // default glyph when the provider sent none
 };
 constexpr TileColors kTiles[kTileColorCount] = {
-    {142, 142, 147, 99, 99, 102, L"\uE8A5"},    // other
-    {255, 172, 56, 245, 120, 0, L"\uE8EF"},     // Калькулятор
-    {80, 215, 105, 36, 138, 61, L"\uE8EF"},     // Конвертер
-    {255, 112, 102, 214, 48, 49, L"\uE756"},    // Команды
-    {146, 162, 190, 88, 104, 135, L"\uE713"},   // Настройки
-    {92, 172, 255, 12, 102, 214, L"\uE774"},    // Интернет
-    {132, 130, 255, 88, 86, 214, L"\uE71D"},    // Приложения
-    {102, 202, 250, 30, 144, 214, L"\uE8B7"},   // Папки
-    {170, 170, 178, 110, 110, 120, L"\uE8A5"},  // Файлы
+    {150, 148, 140, 105, 103, 97, L"\uE8A5"},   // other: warm gray
+    {226, 183, 148, 196, 141, 102, L"\uE8EF"},  // Калькулятор: kraft
+    {148, 168, 117, 104, 125, 78, L"\uE8EF"},   // Конвертер: olive
+    {232, 141, 110, 201, 100, 66, L"\uE756"},   // Команды: clay
+    {140, 138, 130, 94, 93, 89, L"\uE713"},     // Настройки: slate
+    {137, 177, 216, 90, 136, 186, L"\uE774"},   // Интернет: sky
+    {212, 130, 160, 176, 88, 122, L"\uE71D"},   // Приложения: fig
+    {222, 190, 150, 190, 150, 105, L"\uE8B7"},  // Папки: oat/kraft
+    {176, 172, 162, 128, 125, 117, L"\uE8A5"},  // Файлы: cloud gray
 };
 
 uint8_t TileFor(const std::wstring& category) {
@@ -104,6 +104,8 @@ bool LauncherImpl::CreateDeviceIndependentResources() {
   const wchar_t* display = has(L"Segoe UI Variable Display") ? L"Segoe UI Variable Display" : L"Segoe UI";
   const wchar_t* text = has(L"Segoe UI Variable Text") ? L"Segoe UI Variable Text" : L"Segoe UI";
   iconFont_ = has(L"Segoe Fluent Icons") ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets";
+  // Claude's voice is a warm serif; Georgia ships with every Windows and covers Cyrillic.
+  const wchar_t* serif = has(L"Georgia") ? L"Georgia" : display;
 
   bool ok = true;
   auto make = [&](const wchar_t* family, DWRITE_FONT_WEIGHT weight, float size, DWRITE_TEXT_ALIGNMENT ta,
@@ -123,10 +125,10 @@ bool LauncherImpl::CreateDeviceIndependentResources() {
              trail = DWRITE_TEXT_ALIGNMENT_TRAILING;
   const auto pc = DWRITE_PARAGRAPH_ALIGNMENT_CENTER, pf = DWRITE_PARAGRAPH_ALIGNMENT_FAR;
   const wchar_t* icons = iconFont_.c_str();
-  make(display, DWRITE_FONT_WEIGHT_LIGHT, 22.f, lead, pc, fmtQuery_, nullptr);
+  make(serif, DWRITE_FONT_WEIGHT_NORMAL, 21.f, lead, pc, fmtQuery_, nullptr);
   make(icons, DWRITE_FONT_WEIGHT_NORMAL, 20.f, mid, pc, fmtSearchGlyph_, nullptr);
   make(text, DWRITE_FONT_WEIGHT_NORMAL, 15.f, lead, pc, fmtTitle_, &ellipsisTitle_);
-  make(text, DWRITE_FONT_WEIGHT_MEDIUM, 17.f, lead, pc, fmtTopTitle_, &ellipsisTopTitle_);
+  make(serif, DWRITE_FONT_WEIGHT_NORMAL, 17.f, lead, pc, fmtTopTitle_, &ellipsisTopTitle_);
   make(text, DWRITE_FONT_WEIGHT_NORMAL, 12.f, lead, pc, fmtSub_, nullptr);  // trimming is set per layout
   if (fmtSub_) dwrite_->CreateEllipsisTrimmingSign(fmtSub_.Get(), ellipsisSub_.ReleaseAndGetAddressOf());
   make(text, DWRITE_FONT_WEIGHT_SEMI_BOLD, 11.5f, lead, pf, fmtHeader_, nullptr);
@@ -137,8 +139,11 @@ bool LauncherImpl::CreateDeviceIndependentResources() {
   make(icons, DWRITE_FONT_WEIGHT_NORMAL, 20.f, mid, pc, fmtLoadGlyph_, nullptr);
   make(icons, DWRITE_FONT_WEIGHT_NORMAL, 25.f, mid, pc, fmtTopLoadGlyph_, nullptr);
   if (!ok) return false;
+  const D2D1_STROKE_STYLE_PROPERTIES round = D2D1::StrokeStyleProperties(
+      D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND);
+  d2d_->CreateStrokeStyle(&round, nullptr, 0, roundCap_.ReleaseAndGetAddressOf());
 
-  static constexpr wchar_t kPlaceholder[] = L"Поиск Spotlight";
+  static constexpr wchar_t kPlaceholder[] = L"Что найти?";
   dwrite_->CreateTextLayout(kPlaceholder, UINT32(std::size(kPlaceholder) - 1), fmtQuery_.Get(),
                             kWidth - kFieldLeft - kFieldRight, kSearchH, placeholder_.ReleaseAndGetAddressOf());
   dwrite_->CreateTextLayout(kGlyphSearch, 1, fmtSearchGlyph_.Get(), 36.f, kSearchH,
@@ -421,7 +426,18 @@ void LauncherImpl::Draw() {
 }
 
 void LauncherImpl::DrawSearch() {
-  if (searchGlyph_) rt_->DrawTextLayout(D2D1::Point2F(14.f, 0.f), searchGlyph_.Get(), Brush(pal_.text2));
+  {
+    // Claude's spark: rays of alternating length radiating from the centre.
+    const float cx = 32.f, cy = kSearchH * 0.5f;
+    constexpr int kRays = 12;
+    for (int i = 0; i < kRays; ++i) {
+      const float a = float(i) * 6.2831853f / float(kRays) + 0.13f;
+      const float r0 = 2.6f, r1 = (i % 2) ? 7.6f : 10.4f;
+      const D2D1_POINT_2F p0 = D2D1::Point2F(cx + r0 * std::cos(a), cy + r0 * std::sin(a));
+      const D2D1_POINT_2F p1 = D2D1::Point2F(cx + r1 * std::cos(a), cy + r1 * std::sin(a));
+      rt_->DrawLine(p0, p1, Brush(pal_.accent), 2.3f, roundCap_.Get());
+    }
+  }
 
   const D2D1_RECT_F clip = Rect(kFieldLeft - 2.f, 0.f, kWidth - kFieldRight + 2.f, kSearchH);
   rt_->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);

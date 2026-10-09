@@ -1,6 +1,7 @@
 #pragma once
 // Global hotkey: parsing ("Alt+Space", "Win+Shift+K", "Ctrl+`"...) and registration.
-// Strategy: RegisterHotKey(primary) -> RegisterHotKey(fallback) -> WH_KEYBOARD_LL hook for the primary.
+// Both configured hotkeys (e.g. Alt+Space and Ctrl+Space) are active at the same time. Each is registered with
+// RegisterHotKey; one that another app already owns is intercepted with a WH_KEYBOARD_LL hook instead.
 // RegisterHotKey(MOD_ALT, VK_SPACE) does work: hotkeys are matched in the raw input thread before the
 // foreground window ever sees WM_SYSKEYDOWN, so the window system menu never opens.
 #include <windows.h>
@@ -8,6 +9,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 namespace cs {
 
@@ -25,37 +27,43 @@ std::wstring FormatHotkey(const HotkeySpec& hk);
 
 class HotkeyManager {
  public:
-  enum class Mode { None, Primary, Fallback, PrimaryHook };
+  enum class How { Registered, Hook, Failed, Invalid };
+  struct Binding {
+    std::wstring source;  // as written in the config
+    std::wstring text;    // canonical, e.g. "Ctrl+Space" (empty if Invalid)
+    How how = How::Failed;
+  };
 
-  // WM_HOTKEY (id = kHotkeyId) or `hookMsg` (from the hook thread) is posted to `target` when the hotkey fires.
+  // WM_HOTKEY (id in [kHotkeyId, kHotkeyId + kMaxBindings)) or `hookMsg` (from the hook thread) is posted to
+  // `target` when a hotkey fires.
   HotkeyManager(HWND target, UINT hookMsg);
   ~HotkeyManager();
   HotkeyManager(const HotkeyManager&) = delete;
   HotkeyManager& operator=(const HotkeyManager&) = delete;
 
   static constexpr int kHotkeyId = 1;
+  static constexpr int kMaxBindings = 2;
+  static bool IsOurHotkeyId(WPARAM id) { return id >= WPARAM(kHotkeyId) && id < WPARAM(kHotkeyId + kMaxBindings); }
 
-  // (Re)binds. Returns the mode that ended up active; ActiveText() then holds the binding's display text.
-  Mode Apply(std::wstring_view primary, std::wstring_view fallback);
+  // (Re)binds both hotkeys (empty strings are skipped, duplicates collapsed).
+  const std::vector<Binding>& Apply(std::wstring_view primary, std::wstring_view secondary);
   void Clear();
   // After resume from sleep: low-level hooks may have been silently removed by the system; reinstall.
   void Rearm();
 
-  Mode mode() const { return mode_; }
+  const std::vector<Binding>& bindings() const { return bindings_; }
+  // Display text of the working bindings, e.g. "Alt+Space / Ctrl+Space". Empty if none works.
   const std::wstring& ActiveText() const { return active_; }
-  // Non-empty if a hotkey string in the config could not be parsed.
-  const std::wstring& ParseError() const { return parseError_; }
 
  private:
-  bool StartHook(const HotkeySpec& hk);
+  bool StartHook(const std::vector<HotkeySpec>& specs);
   void StopHook();
 
   HWND target_;
   UINT hookMsg_;
-  Mode mode_ = Mode::None;
-  HotkeySpec hookSpec_;
+  std::vector<Binding> bindings_;
+  std::vector<HotkeySpec> hookSpecs_;
   std::wstring active_;
-  std::wstring parseError_;
   std::thread hookThread_;
   DWORD hookThreadId_ = 0;
 };

@@ -88,6 +88,7 @@ LauncherImpl::LauncherImpl(SearchEngine& engine, IHost& host) : engine_(engine),
 LauncherImpl::~LauncherImpl() {
   destroying_ = true;
   icons_.Stop();
+  mascot_.Destroy();
   if (hwnd_) DestroyWindow(hwnd_);
 }
 
@@ -131,6 +132,7 @@ bool LauncherImpl::Create(HINSTANCE inst, const Config& cfg) {
                  SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
   }
   icons_.Start(hwnd_, kMsgIcons);
+  if (mascot_.Create(inst, hwnd_, d2d_.Get())) mascot_.SetEnabled(cfg.mascot);
   UpdateQueryLayout();
   CreateDeviceResources();  // the expensive part (D3D device) happens now, not on first Show
   PlaceWindow();
@@ -150,6 +152,8 @@ void LauncherImpl::ApplyConfig(const Config& cfg) {
   backdrop_ = cfg.backdrop;
   visibleRows_ = std::clamp(cfg.visibleRows, 3, 20);
   engine_.SetMaxResults(cfg.maxResults);
+  mascot_.SetEnabled(cfg.mascot);
+  if (cfg.mascot && visible_) mascot_.Show();
   ApplyTheme();
   scrollTarget_ = std::clamp(scrollTarget_, 0.f, MaxScroll());
   scrollY_ = scrollTarget_;
@@ -189,9 +193,24 @@ void LauncherImpl::PlaceWindow() {
   if (y + hMax > work_.bottom) y = std::max<int>(work_.top, work_.bottom - hMax);
   RECT cur{};
   GetWindowRect(hwnd_, &cur);
-  if (cur.left == x && cur.top == y && cur.right - cur.left == w && cur.bottom - cur.top == h) return;
-  PositioningScope scope(positioning_);
-  SetWindowPos(hwnd_, nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+  if (cur.left != x || cur.top != y || cur.right - cur.left != w || cur.bottom - cur.top != h) {
+    PositioningScope scope(positioning_);
+    SetWindowPos(hwnd_, nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+  mascot_.Place(RECT{x, y, x + w, y + h}, dpi_);
+}
+
+void LauncherImpl::UpdateMascot() {
+  const auto& res = engine_.Last();
+  Mascot::Mood mood = Mascot::Mood::Idle;
+  if (!engine_.LastQuery().empty()) {
+    if (res.empty()) mood = Mascot::Mood::Sad;
+    else if (res[0].category == L"Калькулятор" || res[0].category == L"Конвертер") mood = Mascot::Mood::Happy;
+  }
+  mascot_.SetMood(mood);
+  // Eyes follow the caret: the mascot hangs near the right edge, the caret is usually to its left.
+  const float caret = kFieldLeft + CaretX() - textScrollX_;
+  mascot_.SetLook((caret - (kWidth - 74.f)) / 260.f);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -259,6 +278,8 @@ void LauncherImpl::Show() {
   PlaceWindow();
   ShowWindow(hwnd_, SW_SHOW);
   ForceForeground();
+  UpdateMascot();
+  mascot_.Show();
   if (UINT d = GetDpiForWindow(hwnd_); d && d != dpi_) {  // moved to a monitor with another DPI
     SetDpi(d);
     PlaceWindow();
@@ -282,6 +303,7 @@ void LauncherImpl::Hide() {
   // Leave an empty frame behind so the next Show never flashes stale content.
   showT_ = 0.f;
   Render();
+  mascot_.Hide();
   ShowWindow(hwnd_, SW_HIDE);
 }
 
@@ -316,6 +338,7 @@ void LauncherImpl::RunQuery(const std::wstring* keepKey) {
   }
   UpdateFooter();
   PlaceWindow();
+  UpdateMascot();
   Invalidate();
 }
 
@@ -337,11 +360,14 @@ void LauncherImpl::TextChanged() {
   UpdateQueryLayout();  // before RunQuery: its resize paints synchronously
   RunQuery(nullptr);
   ResetCaretBlink();
+  nudgeSign_ = -nudgeSign_;  // every keystroke gives the mascot a little push, alternating sides
+  mascot_.Nudge(0.45f * nudgeSign_);
   Invalidate();
 }
 
 void LauncherImpl::CaretMoved() {
   UpdateTextScroll();
+  UpdateMascot();
   UpdateIme();
   ResetCaretBlink();
   Invalidate();

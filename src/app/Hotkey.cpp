@@ -67,11 +67,12 @@ UINT KeyFromName(std::wstring_view t) {
 constexpr UINT kMaskVk = 0xE8;  // unassigned VK; injected to stop Alt/Win release from opening menus / Start
 
 struct HookState {
-  std::atomic<UINT> mods{0};
-  std::atomic<UINT> vk{0};
+  static constexpr int kMax = 2;
+  std::atomic<UINT> mods[kMax]{};
+  std::atomic<UINT> vk[kMax]{};
   std::atomic<HWND> target{nullptr};
   std::atomic<UINT> msg{0};
-  bool swallowing = false;  // hook thread only
+  UINT swallowingVk = 0;  // hook thread only: key whose repeats/release we are eating
 };
 HookState g_hook;
 
@@ -96,25 +97,20 @@ void SendMaskKey() {
 LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wp, LPARAM lp) {
   if (code == HC_ACTION) {
     const auto* k = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lp);
-    if (k->vkCode == g_hook.vk.load(std::memory_order_relaxed)) {
-      bool down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
-      if (!down) {
-        if (g_hook.swallowing) {
-          g_hook.swallowing = false;
-          return 1;
-        }
-      } else if (g_hook.swallowing) {
-        return 1;  // auto-repeat
-      } else {
-        // GetAsyncKeyState is only consulted for the hotkey's own key, so normal typing costs one compare.
-        UINT mods = CurrentMods();
-        if (mods == g_hook.mods.load(std::memory_order_relaxed)) {
-          g_hook.swallowing = true;
-          if (mods & (MOD_ALT | MOD_WIN)) SendMaskKey();
-          PostMessageW(g_hook.target.load(), g_hook.msg.load(), 0, 0);
-          return 1;
-        }
-      }
+    const bool down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
+    if (g_hook.swallowingVk && k->vkCode == g_hook.swallowingVk) {
+      if (!down) g_hook.swallowingVk = 0;
+      return 1;  // auto-repeat or release of the hotkey we already handled
+    }
+    for (int i = 0; i < HookState::kMax; ++i) {
+      if (k->vkCode != g_hook.vk[i].load(std::memory_order_relaxed) || !down) continue;
+      // GetAsyncKeyState is only consulted for a hotkey's own key, so normal typing costs two compares.
+      UINT mods = CurrentMods();
+      if (mods != g_hook.mods[i].load(std::memory_order_relaxed)) continue;
+      g_hook.swallowingVk = k->vkCode;
+      if (mods & (MOD_ALT | MOD_WIN)) SendMaskKey();
+      PostMessageW(g_hook.target.load(), g_hook.msg.load(), 0, 0);
+      return 1;
     }
   }
   return CallNextHookEx(nullptr, code, wp, lp);
@@ -226,53 +222,74 @@ HotkeyManager::HotkeyManager(HWND target, UINT hookMsg) : target_(target), hookM
 HotkeyManager::~HotkeyManager() { Clear(); }
 
 void HotkeyManager::Clear() {
-  if (mode_ == Mode::Primary || mode_ == Mode::Fallback) UnregisterHotKey(target_, kHotkeyId);
+  for (int i = 0; i < kMaxBindings; ++i) UnregisterHotKey(target_, kHotkeyId + i);
   StopHook();
-  mode_ = Mode::None;
+  bindings_.clear();
   active_.clear();
 }
 
-HotkeyManager::Mode HotkeyManager::Apply(std::wstring_view primary, std::wstring_view fallback) {
+const std::vector<HotkeyManager::Binding>& HotkeyManager::Apply(std::wstring_view primary,
+                                                               std::wstring_view secondary) {
   Clear();
-  parseError_.clear();
-  HotkeySpec p, f;
-  bool pOk = ParseHotkey(primary, p);
-  bool fOk = !str::Trim(fallback).empty() && ParseHotkey(fallback, f);
-  if (!pOk) parseError_ = std::wstring(primary);
-  else if (!str::Trim(fallback).empty() && !fOk) parseError_ = std::wstring(fallback);
-
-  if (pOk && RegisterHotKey(target_, kHotkeyId, p.mods | MOD_NOREPEAT, p.vk)) {
-    mode_ = Mode::Primary;
-    active_ = FormatHotkey(p);
-  } else if (fOk && !(pOk && f == p) && RegisterHotKey(target_, kHotkeyId, f.mods | MOD_NOREPEAT, f.vk)) {
-    mode_ = Mode::Fallback;
-    active_ = FormatHotkey(f);
-  } else if (pOk && StartHook(p)) {
-    // Primary is owned by another app via RegisterHotKey and the fallback is unavailable too: intercept the
-    // primary at the input level (low-level hooks run before hotkey matching).
-    mode_ = Mode::PrimaryHook;
-    active_ = FormatHotkey(p);
+  std::vector<HotkeySpec> hooked;
+  std::vector<HotkeySpec> seen;
+  const std::wstring_view texts[kMaxBindings] = {primary, secondary};
+  for (int i = 0; i < kMaxBindings; ++i) {
+    if (str::Trim(texts[i]).empty()) continue;
+    Binding b;
+    b.source.assign(texts[i]);
+    HotkeySpec hk;
+    if (!ParseHotkey(texts[i], hk)) {
+      b.how = How::Invalid;
+      bindings_.push_back(std::move(b));
+      continue;
+    }
+    b.text = FormatHotkey(hk);
+    bool dup = false;
+    for (auto& s2 : seen) dup |= s2 == hk;
+    if (dup) continue;
+    seen.push_back(hk);
+    if (RegisterHotKey(target_, kHotkeyId + i, hk.mods | MOD_NOREPEAT, hk.vk)) {
+      b.how = How::Registered;
+    } else {
+      // Owned by another app via RegisterHotKey: intercept at the input level (low-level hooks run before
+      // hotkey matching).
+      b.how = How::Hook;
+      hooked.push_back(hk);
+    }
+    bindings_.push_back(std::move(b));
   }
-  return mode_;
+  if (!hooked.empty() && !StartHook(hooked)) {
+    for (auto& b : bindings_)
+      if (b.how == How::Hook) b.how = How::Failed;
+  }
+  for (auto& b : bindings_) {
+    if (b.how != How::Registered && b.how != How::Hook) continue;
+    if (!active_.empty()) active_ += L" / ";
+    active_ += b.text;
+  }
+  return bindings_;
 }
 
 void HotkeyManager::Rearm() {
-  if (mode_ != Mode::PrimaryHook) return;
-  HotkeySpec hk = hookSpec_;
+  if (hookSpecs_.empty()) return;
+  std::vector<HotkeySpec> specs = hookSpecs_;
   StopHook();
-  if (!StartHook(hk)) {
-    mode_ = Mode::None;
-    active_.clear();
+  if (!StartHook(specs)) {
+    for (auto& b : bindings_)
+      if (b.how == How::Hook) b.how = How::Failed;
   }
 }
 
-bool HotkeyManager::StartHook(const HotkeySpec& hk) {
+bool HotkeyManager::StartHook(const std::vector<HotkeySpec>& specs) {
   StopHook();
-  g_hook.mods = hk.mods;
-  g_hook.vk = hk.vk;
+  for (int i = 0; i < HookState::kMax; ++i) {
+    g_hook.mods[i] = size_t(i) < specs.size() ? specs[size_t(i)].mods : 0;
+    g_hook.vk[i] = size_t(i) < specs.size() ? specs[size_t(i)].vk : 0;
+  }
   g_hook.target = target_;
   g_hook.msg = hookMsg_;
-  g_hook.swallowing = false;
+  g_hook.swallowingVk = 0;
 
   HANDLE ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
   if (!ready) return false;
@@ -300,7 +317,7 @@ bool HotkeyManager::StartHook(const HotkeySpec& hk) {
     hookThreadId_ = 0;
     return false;
   }
-  hookSpec_ = hk;
+  hookSpecs_ = specs;
   return true;
 }
 
@@ -309,8 +326,9 @@ void HotkeyManager::StopHook() {
   PostThreadMessageW(hookThreadId_, WM_QUIT, 0, 0);
   hookThread_.join();
   hookThreadId_ = 0;
-  g_hook.vk = 0;
-  g_hook.swallowing = false;
+  hookSpecs_.clear();
+  for (auto& v : g_hook.vk) v = 0;
+  g_hook.swallowingVk = 0;
 }
 
 }  // namespace cs

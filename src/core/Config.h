@@ -20,13 +20,14 @@ struct CustomCommand {
 };
 
 struct Config {
-  // Hotkeys: "Alt+Space", "Ctrl+Space", "Win+Shift+S", "Ctrl+Alt+K"...
+  // Hotkeys: "Alt+Space", "Ctrl+Space", "Win+Shift+S", "Ctrl+Alt+K"... Both are active at the same time.
   std::wstring hotkey = L"Alt+Space";
   std::wstring fallbackHotkey = L"Ctrl+Space";
 
   std::wstring theme = L"system";  // system | light | dark
   std::wstring backdrop = L"acrylic";  // acrylic | mica | none
   bool autostart = true;
+  bool mascot = true;    // the little creature hanging off the search bar
   int maxResults = 30;   // total results kept after ranking
   int visibleRows = 8;   // rows visible without scrolling
 

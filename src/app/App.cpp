@@ -241,7 +241,7 @@ LRESULT CALLBACK App::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 LRESULT App::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
   switch (msg) {
     case WM_HOTKEY:
-      if (wp == HotkeyManager::kHotkeyId) ToggleLauncher(false);
+      if (HotkeyManager::IsOurHotkeyId(wp)) ToggleLauncher(false);
       return 0;
     case kMsgHookHotkey:
       ToggleLauncher(false);
@@ -384,28 +384,28 @@ void App::SetIdleMode(bool idle) {
 // ---- Hotkey / tray ----
 
 void App::ApplyHotkey(bool announce) {
-  HotkeyManager::Mode mode = hotkey_->Apply(cfg_.hotkey, cfg_.fallbackHotkey);
-  const std::wstring& active = hotkey_->ActiveText();
+  const auto& bindings = hotkey_->Apply(cfg_.hotkey, cfg_.fallbackHotkey);
   std::wstring msg;
-  if (!hotkey_->ParseError().empty())
-    msg = L"Не удалось разобрать сочетание «" + hotkey_->ParseError() + L"» в config.json. ";
-  switch (mode) {
-    case HotkeyManager::Mode::Primary:
-      if (announce || !msg.empty()) msg += L"Горячая клавиша: " + active + L".";
-      break;
-    case HotkeyManager::Mode::Fallback:
-      if (hotkey_->ParseError() == cfg_.hotkey) msg += L"Используется " + active + L".";
-      else msg += L"«" + cfg_.hotkey + L"» занято другой программой — используется " + active + L".";
-      break;
-    case HotkeyManager::Mode::PrimaryHook:
-      msg += L"«" + cfg_.hotkey + L"» занято другой программой";
-      if (!str::Trim(cfg_.fallbackHotkey).empty()) msg += L" (и «" + cfg_.fallbackHotkey + L"» тоже)";
-      msg += L" — " + active + L" перехватывается напрямую.";
-      break;
-    case HotkeyManager::Mode::None:
-      msg += L"Горячая клавиша не назначена. Откройте поиск значком в трее или измените «hotkey» в настройках.";
-      break;
+  bool anyWorking = false;
+  for (const auto& b : bindings) {
+    switch (b.how) {
+      case HotkeyManager::How::Registered: anyWorking = true; break;
+      case HotkeyManager::How::Hook:
+        anyWorking = true;
+        msg += L"«" + b.text + L"» занято другой программой — перехватывается напрямую. ";
+        break;
+      case HotkeyManager::How::Failed:
+        msg += L"Не удалось назначить «" + b.text + L"». ";
+        break;
+      case HotkeyManager::How::Invalid:
+        msg += L"Не удалось разобрать сочетание «" + b.source + L"» в config.json. ";
+        break;
+    }
   }
+  if (!anyWorking)
+    msg += L"Горячая клавиша не назначена. Откройте поиск значком в трее или измените «hotkey» в настройках.";
+  else if (announce || !msg.empty())
+    msg += L"Горячие клавиши: " + hotkey_->ActiveText() + L".";
   if (!msg.empty()) Notify(kAppName, msg);
   UpdateTooltip();
 }

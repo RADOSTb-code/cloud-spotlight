@@ -13,6 +13,7 @@
 
 #include "core/Types.h"
 #include "ui/IconCache.h"
+#include "ui/Mascot.h"
 #include "ui/TextInput.h"
 #include "ui/Theme.h"
 
@@ -101,6 +102,7 @@ class LauncherImpl {
   void SetDpi(UINT dpi);
   void PlaceWindow();  // size/position for the current monitor, row count and DPI
   void ForceForeground();
+  void UpdateMascot();  // mood + where it looks, from the current query/results/caret
 
   void TextChanged();
   void CaretMoved();
@@ -213,6 +215,7 @@ class LauncherImpl {
   ComPtr<IDWriteInlineObject> ellipsisTitle_, ellipsisTopTitle_, ellipsisSub_, ellipsisFooter_;
   ComPtr<IDWriteTextLayout> queryLayout_, placeholder_, searchGlyph_, hint_;
   std::wstring iconFont_;
+  ComPtr<ID2D1StrokeStyle> roundCap_;
 
   // device-dependent
   ComPtr<ID2D1HwndRenderTarget> rt_;
@@ -220,6 +223,8 @@ class LauncherImpl {
   std::array<ComPtr<ID2D1LinearGradientBrush>, kTileColorCount> tiles_;
 
   IconCache icons_;
+  Mascot mascot_;
+  float nudgeSign_ = 1.f;
 };
 
 }  // namespace cs::ui

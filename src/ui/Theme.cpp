@@ -104,7 +104,7 @@ BackdropKind ApplyBackdrop(HWND hwnd, const std::wstring& backdrop, bool dark) {
   }
   if (wantBlur) {
     // Tint is part of the accent (AABBGGRR). Fairly opaque: Win10 blur has no luminosity layer.
-    const DWORD tint = dark ? 0xB01E1E1Eu : 0xB0F3F3F3u;
+    const DWORD tint = dark ? 0xD0242626u : 0xD0F5F9FAu;  // #262624 / #FAF9F5
     if (SetAccent(hwnd, kAccentAcrylicBlurBehind, tint)) return BackdropKind::AccentBlur;
   } else {
     SetAccent(hwnd, kAccentDisabled, 0);
@@ -112,44 +112,43 @@ BackdropKind ApplyBackdrop(HWND hwnd, const std::wstring& backdrop, bool dark) {
   return BackdropKind::Solid;
 }
 
+// Claude's palette: warm charcoal / ivory surfaces, clay accent, soft warm grays.
 Palette MakePalette(bool dark, BackdropKind kind) {
   Palette p;
   p.dark = dark;
-  p.accent = SystemAccent();
-  // Perceived luminance of the accent decides the text color on the selected row.
-  const float lum = 0.2126f * p.accent.r + 0.7152f * p.accent.g + 0.0722f * p.accent.b;
-  p.onAccent = lum > 0.62f ? Rgba(0, 0, 0, 0.9f) : Rgba(255, 255, 255);
+  p.accent = Rgba(0xD9, 0x77, 0x57);  // clay
+  p.onAccent = Rgba(255, 255, 255);
   if (dark) {
-    p.text = Rgba(255, 255, 255);
-    p.text2 = Rgba(255, 255, 255, 0.55f);
-    p.header = Rgba(255, 255, 255, 0.5f);
-    p.separator = Rgba(255, 255, 255, 0.08f);
-    p.hover = Rgba(255, 255, 255, 0.06f);
-    p.scrollbar = Rgba(255, 255, 255, 0.35f);
-    p.tileStroke = Rgba(255, 255, 255, 0.12f);
-    switch (kind) {
-      case BackdropKind::SystemAcrylic: p.background = Rgba(30, 30, 32, 0.32f); break;
-      case BackdropKind::SystemMica: p.background = Rgba(30, 30, 32, 0.18f); break;
+    p.text = Rgba(0xF5, 0xF4, 0xEF);
+    p.text2 = Rgba(0xF5, 0xF4, 0xEF, 0.56f);
+    p.header = Rgba(0xE8, 0xA6, 0x8E, 0.85f);  // soft clay
+    p.separator = Rgba(0xF5, 0xF4, 0xEF, 0.09f);
+    p.hover = Rgba(0xF5, 0xF4, 0xEF, 0.06f);
+    p.scrollbar = Rgba(0xF5, 0xF4, 0xEF, 0.35f);
+    p.tileStroke = Rgba(255, 255, 255, 0.14f);
+    switch (kind) {  // #262624 over the blur
+      case BackdropKind::SystemAcrylic: p.background = Rgba(0x26, 0x26, 0x24, 0.62f); break;
+      case BackdropKind::SystemMica: p.background = Rgba(0x26, 0x26, 0x24, 0.45f); break;
       case BackdropKind::AccentBlur: p.background = Rgba(0, 0, 0, 0.f); break;
-      case BackdropKind::Solid: p.background = Rgba(36, 36, 38, 1.f); break;
+      case BackdropKind::Solid: p.background = Rgba(0x26, 0x26, 0x24, 1.f); break;
     }
   } else {
-    p.text = Rgba(0x1C, 0x1C, 0x1E);
-    p.text2 = Rgba(0, 0, 0, 0.5f);
-    p.header = Rgba(0, 0, 0, 0.48f);
-    p.separator = Rgba(0, 0, 0, 0.08f);
-    p.hover = Rgba(0, 0, 0, 0.05f);
-    p.scrollbar = Rgba(0, 0, 0, 0.3f);
+    p.text = Rgba(0x14, 0x14, 0x13);
+    p.text2 = Rgba(0x14, 0x14, 0x13, 0.55f);
+    p.header = Rgba(0xB4, 0x5A, 0x3C, 0.9f);  // deep clay
+    p.separator = Rgba(0x14, 0x14, 0x13, 0.08f);
+    p.hover = Rgba(0x14, 0x14, 0x13, 0.05f);
+    p.scrollbar = Rgba(0x14, 0x14, 0x13, 0.3f);
     p.tileStroke = Rgba(0, 0, 0, 0.10f);
-    switch (kind) {
-      case BackdropKind::SystemAcrylic: p.background = Rgba(246, 246, 246, 0.40f); break;
-      case BackdropKind::SystemMica: p.background = Rgba(246, 246, 246, 0.22f); break;
+    switch (kind) {  // ivory #FAF9F5 over the blur
+      case BackdropKind::SystemAcrylic: p.background = Rgba(0xFA, 0xF9, 0xF5, 0.70f); break;
+      case BackdropKind::SystemMica: p.background = Rgba(0xFA, 0xF9, 0xF5, 0.55f); break;
       case BackdropKind::AccentBlur: p.background = Rgba(0, 0, 0, 0.f); break;
-      case BackdropKind::Solid: p.background = Rgba(246, 246, 246, 1.f); break;
+      case BackdropKind::Solid: p.background = Rgba(0xFA, 0xF9, 0xF5, 1.f); break;
     }
   }
   p.textSelection = p.accent;
-  p.textSelection.a = dark ? 0.55f : 0.35f;
+  p.textSelection.a = dark ? 0.45f : 0.30f;
   return p;
 }
 

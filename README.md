@@ -3,7 +3,9 @@
 Spotlight из macOS — для Windows 11. Нативный C++20 (Win32 + Direct2D + DWM Acrylic), без фреймворков и
 рантаймов: один `.exe`, мгновенный показ, минимум памяти в фоне.
 
-**Alt+Space** (запасной вариант — **Ctrl+Space**) → начинайте печатать.
+**Alt+Space** или **Ctrl+Space** (работают оба) → начинайте печатать. С нижнего края панели свисает
+глиняный пиксельный зверёк: качается, когда вы печатаете, следит глазами за курсором, радуется готовому ответу
+калькулятора и грустит, если ничего не нашлось.
 
 ## Что умеет
 
@@ -49,11 +51,12 @@ Spotlight из macOS — для Windows 11. Нативный C++20 (Win32 + Dire
 
 ```jsonc
 {
-  "hotkey": "Alt+Space",            // или "Ctrl+Space", "Win+Shift+K"…
-  "fallbackHotkey": "Ctrl+Space",
+  "hotkey": "Alt+Space",            // или "Win+Shift+K"…
+  "fallbackHotkey": "Ctrl+Space",   // второе сочетание, активно одновременно с первым ("" — отключить)
   "theme": "system",                // system | light | dark
   "backdrop": "acrylic",            // acrylic | mica | none
   "autostart": true,
+  "mascot": true,                   // зверёк под строкой поиска
   "fileRoots": ["%USERPROFILE%\\Desktop", "%USERPROFILE%\\Documents", "%USERPROFILE%\\Projects"],
   "folders": [ { "name": "проекты", "path": "%USERPROFILE%\\Projects" } ],
   "commands": [
