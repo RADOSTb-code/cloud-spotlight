@@ -8,7 +8,7 @@ DWM (Acrylic/Mica, скруглённые углы). Цели: старт < 100 
 
 ```
 # Windows (MSVC, VS 2022):
-cmake -B build -G "Visual Studio 17 2022" -A x64 && cmake --build build --config Release
+cmake -B build -A x64 && cmake --build build --config Release
 # Кросс-компиляция с Linux (MinGW-w64, для CI/проверки):
 cmake -B build-win -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-toolchain.cmake && cmake --build build-win -j
 # Юнит-тесты портируемого кода (Linux/Windows):

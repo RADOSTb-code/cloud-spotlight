@@ -68,7 +68,7 @@ Spotlight из macOS — для Windows 11. Нативный C++20 (Win32 + Dire
 
 ```powershell
 # Visual Studio 2022 + CMake
-cmake -B build -G "Visual Studio 17 2022" -A x64
+cmake -B build -A x64
 cmake --build build --config Release
 build\Release\CloudSpotlight.exe
 ```
