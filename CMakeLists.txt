@@ -36,7 +36,7 @@ if(WIN32)
     UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0A00 NTDDI_VERSION=0x0A00000C)
   target_link_libraries(CloudSpotlight PRIVATE
     d2d1 dwrite dwmapi windowscodecs uxtheme shell32 shlwapi ole32 oleaut32 uuid propsys
-    user32 gdi32 advapi32 winhttp powrprof comctl32 imm32)
+    user32 gdi32 advapi32 winhttp powrprof comctl32 imm32 bcrypt iphlpapi ws2_32)
   if(MSVC)
     set_property(TARGET CloudSpotlight PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
     target_link_options(CloudSpotlight PRIVATE /MANIFEST:NO)  # manifest is embedded via res/app.rc
