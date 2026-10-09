@@ -9,6 +9,7 @@
 
 #include "core/Config.h"
 #include "core/SearchEngine.h"
+#include "logic/FileIndex.h"
 #include "ui/LauncherImpl.h"
 
 namespace cs {
@@ -597,7 +598,10 @@ bool LauncherImpl::OnKeyDown(WPARAM vk) {
     case VK_NEXT: MoveSelection(std::max(1, visibleRows_ - 1), false); return true;
     case VK_TAB:
       if (!shift && sel_ >= 0 && rows_[size_t(sel_)].result < engine_.Last().size()) {
-        const std::wstring title = engine_.Last()[rows_[size_t(sel_)].result].title;
+        const Result& r = engine_.Last()[rows_[size_t(sel_)].result];
+        // In path mode the title is only the child name; complete with the full path instead.
+        const bool pathMode = pathq::LooksLikePath(input_.Text()) && r.key.rfind(L"file:", 0) == 0 && !r.payload.empty();
+        const std::wstring title = pathMode ? r.payload : r.title;
         if (title != input_.Text()) {
           input_.SetText(title, false);
           TextChanged();
