@@ -1,0 +1,47 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tests-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests (portable core/logic)
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j
+          ./build/cs_tests
+
+  windows-msvc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        # No explicit -G: CMake picks the newest Visual Studio installed on the runner.
+        run: cmake -S . -B build -A x64
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Tests
+        run: build\Release\cs_tests.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CloudSpotlight
+          path: build/Release/CloudSpotlight.exe
+      - name: Publish "latest" pre-release
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest build/Release/CloudSpotlight.exe \
+            --target "${GITHUB_SHA}" --prerelease \
+            --title "Cloud Spotlight (latest build)" \
+            --notes "Автосборка из ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}. Скачайте CloudSpotlight.exe и запустите."
