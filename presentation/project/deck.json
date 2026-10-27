@@ -1,0 +1,18 @@
+{
+  "v": 4,
+  "createdOnFiles": {"v": 1, "at": "2026-10-27T12:10:00Z"},
+  "lists": "css",
+  "title": "Интернет, который мы теряем",
+  "order": ["cover", "hook", "forget", "chats", "bots", "aitext", "search", "platforms", "splinter", "trust", "turn", "levels", "archive", "rules", "habits", "finale", "sources"],
+  "sections": {
+    "s1": {"description": "Вступление: личная история про поиск ответа, который пропал", "start": "cover"},
+    "s2": {"description": "Восемь проблем современного интернета с цифрами", "start": "forget"},
+    "s3": {"description": "Что можно сделать на уровне человека, площадок и государств", "start": "turn"},
+    "s4": {"description": "Список источников", "start": "sources"}
+  },
+  "faces": {
+    "rubik": {"family": "Rubik", "href": "https://fonts.googleapis.com/css2?family=Rubik:wght@400..800&display=swap"},
+    "lora": {"family": "Lora", "href": "https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&display=swap"}
+  },
+  "designSystems": []
+}
